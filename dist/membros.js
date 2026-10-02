@@ -3,7 +3,14 @@ const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>
 let register=false,store,user,cart=[],requestKey;SOSProfile.mount($('#registration-profile'));SOSProfile.mount($('#account-profile-fields'));for(const name of ['fullName','cpf','gender','birthDate'])$('#account-profile-fields').querySelector('[name="'+name+'"]').disabled=true;$('#registration-profile').querySelectorAll('input,select,button').forEach(field=>field.disabled=true);
 const theme=localStorage.getItem('sos-theme');if(theme)document.documentElement.dataset.theme=theme;$('#member-theme').onclick=()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;localStorage.setItem('sos-theme',next)};
 function message(text,error=false){$('#member-message').textContent=text;$('#member-message').className=error?'error':'success'}
-async function api(path,body){const r=await fetch(path,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-SOS-Member':'1'},body:JSON.stringify(body)}:{})});const data=await r.json();if(!r.ok)throw Error(data.error||'Não foi possível concluir. Tente novamente.');return data}
+async function api(path,body){
+ let r;try{r=await fetch(path,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-SOS-Member':'1'},body:JSON.stringify(body)}:{})})}catch{throw Error('Não foi possível conectar à loja. Verifique sua conexão.')}
+ const text=await r.text();let data;
+ try{data=JSON.parse(text)}catch{throw Error('O serviço da loja está indisponível no momento. Não foi possível concluir esta solicitação.')}
+ if(!data||typeof data!=='object')throw Error('A loja retornou uma resposta inválida. Não foi possível concluir esta solicitação.');
+ if(!r.ok)throw Error(typeof data.error==='string'?data.error:'Não foi possível concluir. Tente novamente.');
+ return data
+}
 function tab(signup){register=signup;$('#member-auth').classList.toggle('register-mode',signup);$('#registration-profile').hidden=!signup;$('#registration-profile').querySelectorAll('input,select,button').forEach(field=>field.disabled=!signup);$('#member-form').elements.password.autocomplete=signup?'new-password':'current-password';$('#member-submit').textContent=signup?'Criar minha conta':'Entrar na minha conta';for(const [id,active] of [['login-tab',!signup],['register-tab',signup]]){$('#'+id).className='button '+(active?'primary':'outline');$('#'+id).setAttribute('aria-pressed',active)}}
 $('#login-tab').onclick=()=>tab(false);$('#register-tab').onclick=()=>tab(true);
 $('#member-form').onsubmit=async e=>{e.preventDefault();const button=$('#member-submit');button.disabled=true;try{const data=Object.fromEntries(new FormData(e.currentTarget));user=(await api('/api/members/'+(register?'register':'login'),data)).member;e.target.reset();message(register?'Cadastro criado. Bem-vindo!':'Você entrou na sua conta.');await account()}catch(err){message(err.message,true)}finally{button.disabled=false}};
