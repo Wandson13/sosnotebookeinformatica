@@ -28,13 +28,19 @@ Os cadastros ficam no banco SQLite em `.local/store.sqlite`; as imagens enviadas
 
 As alterações salvas aparecem na loja ao abrir ou atualizar a página. Produtos ocultos não aparecem no catálogo público. O carrinho não processa pagamentos: a contratação e integração de um provedor continuam pendentes.
 
-## Publicação no Sites
+## Publicação na Cloudflare
 
-A publicação ainda não foi concluída devido ao bloqueio de permissão da sessão. O projeto usa o mesmo identificador do Site original. O código publicado exige os bindings D1 `DB`, R2 `BUCKET` e a configuração `ADMIN_EMAIL`. Essa configuração foi registrada no Sites para a conta proprietária, mas só entra em vigor com uma publicação bem-sucedida. Nunca aponte o servidor de prévia local para a internet.
+Loja: https://sosnotebookeinformatica.wandson.workers.dev/
 
-O painel publicado usa a entrada com ChatGPT e verifica no servidor se a conta é a administradora. Ele não libera administração para todos os visitantes. A autenticação online ainda precisa ser conferida após publicar.
+Login administrativo: https://sosnotebookeinformatica.wandson.workers.dev/admin/login
 
-O banco local e o banco online são separados. Antes da primeira publicação definitiva, transfira para a versão online os cadastros e imagens que tiver criado localmente. Não há sincronização automática entre esses ambientes.
+O GitHub armazena o código, HTML, CSS, JavaScript e imagens estáticas. O Cloudflare Workers publica a aplicação; o banco D1 `sos-notebook-db` armazena os dados online e o bucket R2 privado `sos-notebook-imagens` recebe as imagens enviadas pelo painel. O banco real e dados pessoais não são enviados ao Git.
+
+A branch `main` está conectada ao Workers Builds. Build: `pnpm run build`; deploy: `pnpm run deploy` (aplica as migrações e publica). `wrangler.jsonc` define bindings e as configurações não secretas da autenticação.
+
+O login usa Cloudflare Access no caminho `/admin/login`, com política restrita ao e-mail administrador confirmado pelo proprietário. O Worker valida assinatura, emissor, público-alvo, expiração e e-mail do token em cada requisição administrativa. As variáveis `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` e `ADMIN_EMAIL` devem corresponder ao aplicativo Access. A loja e a área de clientes continuam públicas.
+
+O banco local e o banco online são separados, sem sincronização automática. Os cadastros e uploads existentes em `.local` ainda não foram importados. Sem catálogo salvo no D1, a loja usa o catálogo inicial de `seed.mjs`. Não exponha o servidor de prévia local na internet.
 
 ## Manutenção técnica
 
@@ -48,7 +54,7 @@ Em Pedidos de clientes, o administrador confirma a compra concluída apenas apó
 
 O modo demonstrativo atual identifica os pedidos como testes e libera avaliações identificadas como demonstração após a conclusão. Desative Catálogo demonstrativo em Loja e aparência para receber pedidos reais; pedidos antigos de demonstração continuam sendo testes.
 
-Cadastros, sessões, pedidos e avaliações ficam em tabelas separadas do catálogo, preservados ao editar produtos. A migração 0001_members.sql é aplicada ao iniciar a prévia; aplique-a também no banco online antes de publicar. Os hashes de senha usam PBKDF2 e as sessões usam cookies HttpOnly. Ainda não há recuperação de senha por e-mail nem confirmação de endereço de e-mail, pois não há serviço de e-mail integrado. Pagamento online também depende de integração futura. A versão atual continua sendo uma prévia local.
+Cadastros, sessões, pedidos e avaliações ficam em tabelas separadas do catálogo, preservados ao editar produtos. A migração 0001_members.sql é aplicada ao iniciar a prévia; aplique-a também no banco online antes de publicar. Os hashes de senha usam PBKDF2 e as sessões usam cookies HttpOnly. Ainda não há recuperação de senha por e-mail nem confirmação de endereço de e-mail, pois não há serviço de e-mail integrado. Pagamento online também depende de integração futura. A publicação online mantém o modo demonstrativo até a configuração definitiva da loja.
 
 ## Dados do cliente e consulta de CEP
 
@@ -61,3 +67,4 @@ A consulta usa https://viacep.com.br e envia apenas o CEP, sem cookies ou refer�
 No painel, abra Usuários para buscar por nome ou e-mail. Dados e avaliações mostra o cadastro completo e as avaliações do cliente, com links para os produtos. Você pode editar os dados, banir e reativar a conta. Banir bloqueia o acesso e revoga sessões, preservando pedidos e avaliações. Alterar o e-mail também encerra as sessões. Senhas não são expostas nem editadas nessa tela. Alterações simultâneas são detectadas para evitar sobrescrever um cadastro atualizado em outra janela.
 
 Na ficha do usuário, Dados, compras e avaliações inclui o histórico de pedidos, itens, quantidades, totais, datas, status e indicação de demonstração. Clientes só podem alterar telefone e endereço. Nome, e-mail, CPF, gênero e nascimento são protegidos também pela API e só podem ser alterados pela administração. Para cadastros antigos incompletos, a loja deve completar os dados pessoais.
+
