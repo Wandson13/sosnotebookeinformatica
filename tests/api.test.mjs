@@ -1,0 +1,27 @@
+import{test}from'node:test';import assert from'node:assert/strict';import fs from'node:fs';import{DatabaseSync}from'node:sqlite';import worker from'../server.mjs';
+test('Admin authorization, durable edits, conflicts, drafts and validation',async()=>{
+ const db=new DatabaseSync(':memory:');db.exec(fs.readFileSync(new URL('../drizzle/0000_minor_smasher.sql',import.meta.url),'utf8'));
+ const env={ADMIN_EMAIL:'owner@example.test',DB:{prepare(sql){return{bind(...params){return{async first(){return db.prepare(sql).get(...params)||null}}}}}},ASSETS:{fetch:()=>new Response('asset')},BUCKET:{}};
+ const request=(path,method='GET',body,admin=true,origin='https://shop.test')=>new Request('https://shop.test'+path,{method,headers:{'Content-Type':'application/json','Origin':origin,'X-SOS-Admin':'1',...(admin?{'oai-authenticated-user-id':'owner','oai-authenticated-user-email':env.ADMIN_EMAIL}:{})},...(body?{body:JSON.stringify(body)}:{})});
+ assert.equal((await worker.fetch(request('/api/admin/store','GET',null,false),env)).status,403);
+ let current=await(await worker.fetch(request('/api/admin/store'),env)).json();assert.equal(current.revision,0);
+ assert.equal((await worker.fetch(request('/api/admin/store','PUT',current,true,'https://evil.test'),env)).status,403);
+ const invalid=structuredClone(current);invalid.products[0].price=-1;assert.equal((await worker.fetch(request('/api/admin/store','PUT',invalid),env)).status,400);
+ current.products.push({id:'test-item',name:'Produto teste',description:'Descrição',category:current.categories[0],price:9900,mode:'cart',icon:'cpu',image:'',active:false});
+ const saved=await worker.fetch(request('/api/admin/store','PUT',current),env);assert.equal(saved.status,200);assert.equal((await saved.json()).revision,1);
+ assert.equal((await worker.fetch(request('/api/admin/store','PUT',current),env)).status,409);
+ const catalog=await(await worker.fetch(request('/api/catalog','GET',null,false),env)).json();assert.equal(catalog.products.some(p=>p.id==='test-item'),false);
+ const reload=await(await worker.fetch(request('/api/admin/store'),env)).json();assert.equal(reload.products.at(-1).name,'Produto teste');
+ reload.products.at(-1).active=true;assert.equal((await worker.fetch(request('/api/admin/store','PUT',reload),env)).status,200);
+ const publicReload=await(await worker.fetch(request('/api/catalog','GET',null,false),env)).json();assert.equal(publicReload.products.at(-1).name,'Produto teste');
+ const badImage=structuredClone(publicReload);badImage.products[0].images=['javascript:alert(1)'];assert.equal((await worker.fetch(request('/api/admin/store','PUT',badImage),env)).status,400);
+ const many=structuredClone(publicReload);many.products[0].images=Array(11).fill('/sos-logo.png');assert.equal((await worker.fetch(request('/api/admin/store','PUT',many),env)).status,400);
+ publicReload.products[0].images=['/sos-logo.png','/favicon.png'];assert.equal((await worker.fetch(request('/api/admin/store','PUT',publicReload),env)).status,200);
+ const gallery=await(await worker.fetch(request('/api/catalog','GET',null,false),env)).json();assert.deepEqual(gallery.products[0].images,['/sos-logo.png','/favicon.png']);assert.equal(gallery.products[0].image,'/sos-logo.png');
+ assert.equal(gallery.banners[0].title,gallery.settings.headline);
+ gallery.banners.push({...gallery.banners[0],title:'Segundo destaque',image:'/favicon.png',destination:'products'});
+ assert.equal((await worker.fetch(request('/api/admin/store','PUT',gallery),env)).status,200);
+ const updatedBanners=await(await worker.fetch(request('/api/catalog','GET',null,false),env)).json();assert.equal(updatedBanners.banners.length,2);assert.equal(updatedBanners.banners[1].title,'Segundo destaque');
+ updatedBanners.banners[1].destination='javascript:alert(1)';assert.equal((await worker.fetch(request('/api/admin/store','PUT',updatedBanners),env)).status,400);
+ db.close();
+});

@@ -1,0 +1,2 @@
+ALTER TABLE members ADD COLUMN profile TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE member_orders ADD COLUMN customer TEXT NOT NULL DEFAULT '{}';

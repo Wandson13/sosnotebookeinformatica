@@ -1,0 +1,21 @@
+import http from 'node:http';import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';import{DatabaseSync}from'node:sqlite';import worker from './server.mjs';
+const root=path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'));const localDir=path.join(root,'.local');fs.mkdirSync(path.join(localDir,'uploads'),{recursive:true});const db=new DatabaseSync(path.join(localDir,'store.sqlite'));db.exec('PRAGMA journal_mode=WAL');
+db.exec('CREATE TABLE IF NOT EXISTS local_migrations (name TEXT PRIMARY KEY)');for(const name of fs.readdirSync(path.join(root,'drizzle')).filter(n=>n.endsWith('.sql')).sort()){if(!db.prepare('SELECT name FROM local_migrations WHERE name=?').get(name)){db.exec('BEGIN');try{db.exec(fs.readFileSync(path.join(root,'drizzle',name),'utf8'));db.prepare('INSERT INTO local_migrations(name) VALUES(?)').run(name);db.exec('COMMIT')}catch(e){db.exec('ROLLBACK');throw e}}}
+const DB={prepare(sql){return{bind(...params){return{async first(){return db.prepare(sql).get(...params)||null}}}}}};
+const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp'};
+const ASSETS={async fetch(req){let pathname;try{pathname=decodeURIComponent(new URL(req.url).pathname)}catch{return new Response('Not found',{status:404})}const base=path.join(root,'dist');const file=path.resolve(base,'.'+(pathname==='/'?'/index.html':pathname));if(!file.startsWith(base+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()||!Object.hasOwn(types,path.extname(file)))return new Response('Not found',{status:404});return new Response(fs.readFileSync(file),{headers:{'Content-Type':types[path.extname(file)],'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}};
+const BUCKET={async put(key,bytes){if(!/^[a-f0-9-]+\.(png|jpg|webp)$/.test(key))throw Error('Invalid key');fs.writeFileSync(path.join(localDir,'uploads',key),bytes)},async get(key){if(!/^[a-f0-9-]+\.(png|jpg|webp)$/.test(key))return null;const file=path.join(localDir,'uploads',key);return fs.existsSync(file)?{body:fs.readFileSync(file),httpMetadata:{contentType:types[path.extname(file)]}}:null}};
+const port=Number(process.env.PORT||4175);const origin=`http://127.0.0.1:${port}`;const sessions=new Map();
+http.createServer(async(req,res)=>{try{
+ if(req.headers.host!==`127.0.0.1:${port}`){res.writeHead(403).end('Host inválido');return}
+ const url=new URL(req.url,origin);const headers=new Headers();for(const[k,v]of Object.entries(req.headers))if(v&&!k.startsWith('oai-'))headers.set(k,String(v));
+ if(url.pathname==='/api/local-login'||url.pathname==='/api/local-logout'){
+  if(req.method!=='POST'||req.headers.origin!==origin||req.headers['x-sos-admin']!=='1'){res.writeHead(403).end();return}
+  const token=crypto.randomBytes(32).toString('hex');const old=req.headers.cookie?.match(/(?:^|; )sos_admin=([a-f0-9]+)/)?.[1];if(old)sessions.delete(old);
+  const login=url.pathname.endsWith('login');if(login)sessions.set(token,Date.now()+8*3600000);
+  res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store','Set-Cookie':`sos_admin=${login?token:''}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${login?28800:0}`}).end('{"ok":true}');return
+ }
+ const token=req.headers.cookie?.match(/(?:^|; )sos_admin=([a-f0-9]+)/)?.[1];if(token&&sessions.get(token)>Date.now()){headers.set('oai-authenticated-user-id','local-owner');headers.set('oai-authenticated-user-email','local-owner@example.test')}
+ const chunks=[];let size=0;for await(const c of req){size+=c.length;if(size>4000000){res.writeHead(413).end();return}chunks.push(c)}
+ const request=new Request(url,{method:req.method,headers,...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})});const result=await worker.fetch(request,{DB,BUCKET,ASSETS,ADMIN_EMAIL:'local-owner@example.test',LOCAL_PREVIEW:true});res.writeHead(result.status,Object.fromEntries(result.headers));res.end(Buffer.from(await result.arrayBuffer()));
+ }catch(e){console.error(e);res.writeHead(500,{'Content-Type':'application/json'}).end('{"error":"Não foi possível concluir a operação."}')}}).listen(port,'127.0.0.1',()=>console.log(`Prévia: ${origin}\nPainel: ${origin}/admin.html`));

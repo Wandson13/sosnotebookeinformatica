@@ -1,0 +1,1 @@
+(()=>{const header=document.querySelector('.header-inner');if(header&&!header.querySelector('[data-member-link]')){const a=document.createElement('a');a.href='membros.html';a.className='button outline';a.dataset.memberLink='';a.textContent='Minha conta';header.append(a)}})();

@@ -1,0 +1,1 @@
+ALTER TABLE member_reviews ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0;
