@@ -1,0 +1,7 @@
+node_modules/
+.local/
+.env
+.sites-runtime/
+
+dist/client/
+dist/server/
