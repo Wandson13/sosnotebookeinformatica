@@ -28,6 +28,8 @@
     }
   ],
   "vars": {
+    "FIREBASE_API_KEY": "AIzaSyBx1GX26oLNVNyTwTv67NMNni6QTBdjgjc",
+    "FIREBASE_PROJECT_ID": "sosnotebookeinformatica",
     "ACCESS_TEAM_DOMAIN": "little-poetry-b8d6.cloudflareaccess.com",
     "ADMIN_EMAIL": "Wandson@live.com",
     "ACCESS_AUD": "bd88081d31d72e36f6a5b53680be5dc7b1ea1c94459afdea35f4e0aa428562aa"

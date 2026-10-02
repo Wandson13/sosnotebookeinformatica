@@ -9,3 +9,4 @@ fs.copyFileSync('members.mjs','dist/server/members.mjs');
 fs.copyFileSync('member-profile.mjs','dist/server/member-profile.mjs');
 
 fs.copyFileSync('admin-users.mjs','dist/server/admin-users.mjs');
+fs.copyFileSync('firebase-members.mjs','dist/server/firebase-members.mjs');

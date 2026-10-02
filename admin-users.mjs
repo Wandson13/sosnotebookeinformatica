@@ -20,6 +20,7 @@ export async function adminUsers(req,env,body,{query,list,fail,json}){
  if(path==='/api/admin/users/update'&&req.method==='POST'){
   const profile=validateProfile(body.profile);
   if(typeof body.email!=='string'||body.email.length>254||!/^\S+@\S+\.\S+$/.test(body.email.trim()))fail('Informe um e-mail válido.');const email=body.email.trim().toLowerCase();
+  if(env.FIREBASE_API_KEY&&email!==user.email)fail('A alteração de e-mail precisa ser sincronizada com o Firebase. Mantenha o e-mail atual e entre em contato com o responsável técnico.',409);
   const saved=await query(env,'UPDATE members SET name=?,email=?,profile=?,revision=revision+1 WHERE id=? AND revision=? AND NOT EXISTS(SELECT 1 FROM members WHERE email=? AND id<>?) RETURNING id',profile.fullName,email,JSON.stringify(profile),id,body.revision,email,id);
   if(!saved)fail('O e-mail já está em uso ou o cadastro mudou. Reabra o usuário e confira os dados.',409);
   if(email!==user.email)await query(env,'DELETE FROM member_sessions WHERE member_id=? RETURNING member_id',id);

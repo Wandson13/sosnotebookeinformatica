@@ -1,3 +1,4 @@
+import {firebaseMemberAuth} from './firebase-members.mjs';
 import {pbkdf2Async} from '@noble/hashes/pbkdf2.js';
 import {sha256} from '@noble/hashes/sha2.js';
 import {adminUsers} from './admin-users.mjs';
@@ -38,6 +39,7 @@ export async function memberRoutes(req,env,{readStore,isAdmin}){
    const raw=await req.text();if(raw.length>20000)fail('Dados muito grandes.',413);try{body=JSON.parse(raw)}catch{fail('Dados inválidos.')}
    if(!body||typeof body!=='object'||Array.isArray(body))fail('Dados inválidos.');
   }
+  if(env.FIREBASE_API_KEY){const result=await firebaseMemberAuth(req,env,body,{query,limit,login,json,validateProfile});if(result)return result}
   if(path.startsWith('/api/admin/users')){if(!isAdmin)fail('Acesso restrito à administração.',403);return await adminUsers(req,env,body,{query,list,fail,json})}
   if(path==='/api/product-reviews'&&req.method==='GET'){
    const id=new URL(req.url).searchParams.get('id');

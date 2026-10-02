@@ -13,6 +13,13 @@ async function api(path,body){
 }
 function tab(signup){register=signup;$('#member-auth').classList.toggle('register-mode',signup);$('#registration-profile').hidden=!signup;$('#registration-profile').querySelectorAll('input,select,button').forEach(field=>field.disabled=!signup);$('#member-form').elements.password.autocomplete=signup?'new-password':'current-password';$('#member-submit').textContent=signup?'Criar minha conta':'Entrar na minha conta';for(const [id,active] of [['login-tab',!signup],['register-tab',signup]]){$('#'+id).className='button '+(active?'primary':'outline');$('#'+id).setAttribute('aria-pressed',active)}}
 $('#login-tab').onclick=()=>tab(false);$('#register-tab').onclick=()=>tab(true);
+$('#member-reset').onclick=async e=>{
+ const email=$('#member-form').elements.email;
+ if(!email.reportValidity())return;
+ const button=e.currentTarget;button.disabled=true;
+ try{const result=await api('/api/members/reset-password',{email:email.value});message(result.message)}
+ catch(error){message(error.message,true)}finally{button.disabled=false}
+};
 $('#member-form').onsubmit=async e=>{e.preventDefault();const button=$('#member-submit');button.disabled=true;try{const data=Object.fromEntries(new FormData(e.currentTarget));user=(await api('/api/members/'+(register?'register':'login'),data)).member;e.target.reset();message(register?'Cadastro criado. Bem-vindo!':'Você entrou na sua conta.');await account()}catch(err){message(err.message,true)}finally{button.disabled=false}};
 $('#member-logout').onclick=async()=>{try{await api('/api/members/logout',{});user=null;await account();message('Você saiu da conta.')}catch(e){message(e.message,true)}};
 $('#profile-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button[type=submit]');button.disabled=true;try{await api('/api/members/profile',Object.fromEntries(new FormData(e.target)));$('#profile-message').textContent='Dados atualizados.'}catch(err){$('#profile-message').textContent=err.message}finally{button.disabled=false}};
