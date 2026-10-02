@@ -7,10 +7,10 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 const digest=async text=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)));
 const random=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
-async function passwordHash(password,salt,legacy=false){
+async function passwordHash(password,salt){
  const bytes=new TextEncoder().encode(password),saltBytes=new TextEncoder().encode(salt);
  const key=await crypto.subtle.importKey('raw',bytes,'PBKDF2',false,['deriveBits']);
- try{return (legacy?'':'pbkdf2-sha256:100000:')+hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBytes,iterations:legacy?600000:100000,hash:'SHA-256'},key,256))}
+ try{return hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBytes,iterations:600000,hash:'SHA-256'},key,256))}
  catch(error){
   // Workers caps native PBKDF2 at 100,000 iterations. Preserve the existing
   // 600,000-iteration format using the same algorithm, never weaker hashes.
@@ -65,7 +65,7 @@ export async function memberRoutes(req,env,{readStore,isAdmin}){
     if(!user)fail('Não foi possível cadastrar este e-mail. Se já tem uma conta, use Entrar.',409);return login(req,env,user);
    }
    const user=await query(env,'SELECT * FROM members WHERE email=?',email);
-   const hash=await passwordHash(body.password,user?.salt||'invalid-user',!!user&&!user.password_hash.startsWith('pbkdf2-sha256:100000:'));
+   const hash=await passwordHash(body.password,user?.salt||'invalid-user');
    if(!user||!equal(hash,user.password_hash))fail('E-mail ou senha incorretos.',401);
    if(user.banned)fail('Sua conta está suspensa. Entre em contato com a loja.',403);return login(req,env,user);
   }

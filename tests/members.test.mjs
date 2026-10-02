@@ -16,8 +16,8 @@ assert.equal((await call('/api/members/login',{email:'test@example.test',passwor
 assert.notEqual(db.prepare('SELECT password_hash FROM members').get().password_hash,'senha-de-teste-123');
 const storedPassword=db.prepare('SELECT password_hash,salt FROM members').get();
 const legacyKey=await crypto.subtle.importKey('raw',new TextEncoder().encode('senha-de-teste-123'),'PBKDF2',false,['deriveBits']);
-const legacyHash=Buffer.from(await nativeDeriveBits({name:'PBKDF2',salt:new TextEncoder().encode(storedPassword.salt),iterations:100000,hash:'SHA-256'},legacyKey,256)).toString('hex');
-assert.equal(storedPassword.password_hash,'pbkdf2-sha256:100000:'+legacyHash,'Store explicit parameters for future compatibility');
+const legacyHash=Buffer.from(await nativeDeriveBits({name:'PBKDF2',salt:new TextEncoder().encode(storedPassword.salt),iterations:600000,hash:'SHA-256'},legacyKey,256)).toString('hex');
+assert.equal(storedPassword.password_hash,legacyHash,'Fallback must preserve existing password hashes');
 assert.equal((await call('/api/members/orders')).status,401);
 assert.equal((await call('/api/members/profile')).status,401);
 const savedProfile=await(await call('/api/members/profile',undefined,cookie)).json();assert.equal(savedProfile.profile.cpf,'52998224725');assert.equal(savedProfile.profile.cep,'01001000');
