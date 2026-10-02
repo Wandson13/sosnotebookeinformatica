@@ -15,6 +15,7 @@
     "wrangler": "^4.145.0"
   },
   "dependencies": {
+    "@noble/hashes": "2.0.1",
     "jose": "^6.2.12"
   },
   "packageManager": "pnpm@11.19.0"

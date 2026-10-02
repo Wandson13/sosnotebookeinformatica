@@ -1,6 +1,12 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {DatabaseSync} from 'node:sqlite';import worker from '../server.mjs';
 const profile={fullName:'Pessoa de Teste',cpf:'529.982.247-25',birthDate:'1995-05-20',gender:'not-informed',phone:'(99) 98115-0000',cep:'01001-000',state:'SP',city:'São Paulo',neighborhood:'Sé',street:'Praça da Sé',number:'10',complement:''};
-test('Members: authentication, private orders, authoritative prices and verified reviews',async()=>{
+test('Members: authentication, private orders, authoritative prices and verified reviews',async(t)=>{
+// Reproduce the production Workers PBKDF2 ceiling rather than Node's unlimited implementation.
+const nativeDeriveBits=crypto.subtle.deriveBits.bind(crypto.subtle);
+t.mock.method(crypto.subtle,'deriveBits',async (algorithm,...args)=>{
+ if(algorithm.name==='PBKDF2'&&algorithm.iterations>100000)throw new DOMException('Pbkdf2 failed: iteration counts above 100000 are not supported.','NotSupportedError');
+ return nativeDeriveBits(algorithm,...args);
+});
 const db=new DatabaseSync(':memory:');for(const file of fs.readdirSync(new URL('../drizzle/',import.meta.url)).filter(f=>f.endsWith('.sql')))db.exec(fs.readFileSync(new URL('../drizzle/'+file,import.meta.url),'utf8'));
 const env={ADMIN_EMAIL:'owner@example.test',DB:{prepare(sql){return{bind(...args){return{async first(){return db.prepare(sql).get(...args)||null}}}}}},ASSETS:{fetch:()=>new Response('ok')}};
 async function call(path,body,cookie='',admin=false,origin='https://shop.test'){return worker.fetch(new Request('https://shop.test'+path,{method:body?'POST':'GET',headers:{'Origin':origin,'Content-Type':'application/json','X-SOS-Member':'1',Cookie:cookie,...(admin?{'oai-authenticated-user-id':'owner','oai-authenticated-user-email':env.ADMIN_EMAIL}:{})},...(body?{body:JSON.stringify(body)}:{})}),env)}
@@ -8,6 +14,10 @@ let result=await call('/api/members/register',{...profile,email:'test@example.te
 assert.equal((await call('/api/members/login',{email:'test@example.test',password:'senha-incorreta'})).status,401);
 assert.equal((await call('/api/members/login',{email:'test@example.test',password:'senha-de-teste-123'})).status,200);
 assert.notEqual(db.prepare('SELECT password_hash FROM members').get().password_hash,'senha-de-teste-123');
+const storedPassword=db.prepare('SELECT password_hash,salt FROM members').get();
+const legacyKey=await crypto.subtle.importKey('raw',new TextEncoder().encode('senha-de-teste-123'),'PBKDF2',false,['deriveBits']);
+const legacyHash=Buffer.from(await nativeDeriveBits({name:'PBKDF2',salt:new TextEncoder().encode(storedPassword.salt),iterations:600000,hash:'SHA-256'},legacyKey,256)).toString('hex');
+assert.equal(storedPassword.password_hash,legacyHash,'Fallback must preserve existing password hashes');
 assert.equal((await call('/api/members/orders')).status,401);
 assert.equal((await call('/api/members/profile')).status,401);
 const savedProfile=await(await call('/api/members/profile',undefined,cookie)).json();assert.equal(savedProfile.profile.cpf,'52998224725');assert.equal(savedProfile.profile.cep,'01001000');

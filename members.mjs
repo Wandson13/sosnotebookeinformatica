@@ -1,3 +1,5 @@
+import {pbkdf2Async} from '@noble/hashes/pbkdf2.js';
+import {sha256} from '@noble/hashes/sha2.js';
 import {adminUsers} from './admin-users.mjs';
 import {validateProfile} from './member-profile.mjs';
 const json=(data,status=200,headers={})=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...headers}});
@@ -5,7 +7,17 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 const digest=async text=>hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)));
 const random=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
-async function passwordHash(password,salt){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:600000,hash:'SHA-256'},key,256))}
+async function passwordHash(password,salt){
+ const bytes=new TextEncoder().encode(password),saltBytes=new TextEncoder().encode(salt);
+ const key=await crypto.subtle.importKey('raw',bytes,'PBKDF2',false,['deriveBits']);
+ try{return hex(await crypto.subtle.deriveBits({name:'PBKDF2',salt:saltBytes,iterations:600000,hash:'SHA-256'},key,256))}
+ catch(error){
+  // Workers caps native PBKDF2 at 100,000 iterations. Preserve the existing
+  // 600,000-iteration format using the same algorithm, never weaker hashes.
+  if(error.name!=='NotSupportedError'||!/iteration/i.test(error.message))throw error;
+  return hex(await pbkdf2Async(sha256,bytes,saltBytes,{c:600000,dkLen:32}));
+ }
+}
 const equal=(a,b)=>{let diff=a.length^b.length;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0};
 const query=(env,sql,...args)=>env.DB.prepare(sql).bind(...args).first();
 async function list(env,sql,...args){const row=await query(env,`SELECT json_group_array(json(row)) AS rows FROM (${sql})`,...args);return JSON.parse(row?.rows||'[]')}
